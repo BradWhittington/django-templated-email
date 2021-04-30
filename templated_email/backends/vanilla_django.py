@@ -2,6 +2,11 @@ import uuid
 import hashlib
 from io import BytesIO
 
+try:
+    from html.parser import HTMLParser
+except ImportError:
+    from HTMLParser import HTMLParser
+
 from django.conf import settings
 from django.core.mail import get_connection
 from django.template import Context
@@ -82,7 +87,7 @@ class TemplateBackend(object):
                       template_dir=None, file_extension=None):
         response = {}
         errors = {}
-        render_context = Context(context, autoescape=False)
+        render_context = Context(context, autoescape=True)
 
         file_extension = file_extension or self.template_suffix
         if file_extension.startswith('.'):
@@ -101,9 +106,14 @@ class TemplateBackend(object):
                 one_full_template_name += template_extension
             full_template_names.append(one_full_template_name)
 
-        for part in ['subject', 'html', 'plain']:
+        unescape = HTMLParser().unescape
+
+        for preprocessor, part in [
+                (unescape, 'subject'),
+                (lambda safe_text: safe_text, 'html'),
+                (unescape, 'plain')]:
             try:
-                response[part] = render_block_to_string(full_template_names, part, render_context)
+                response[part] = preprocessor(render_block_to_string(full_template_names, part, render_context))
             except BlockNotFound as error:
                 errors[part] = error
 
